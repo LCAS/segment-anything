@@ -157,6 +157,7 @@ class SamAutomaticMaskGenerator:
                  is filtered on using the stability_score_thresh parameter.
                crop_box (list(float)): The crop of the image used to generate
                  the mask, given in XYWH format.
+               features (float): The features associated with the mask.
         """
 
         # Generate masks
@@ -180,6 +181,14 @@ class SamAutomaticMaskGenerator:
 
         # Write mask records
         curr_anns = []
+        #feature_dict = defaultdict(list)
+
+        #print("Length iou_preds",len(mask_data["iou_preds"]))
+        #print(mask_data["iou_preds"])
+        print("Length iou_features",len(mask_data["iou_features"]))
+        print(mask_data["iou_features"])
+        
+
         for idx in range(len(mask_data["segmentations"])):
             ann = {
                 "segmentation": mask_data["segmentations"][idx],
@@ -189,8 +198,15 @@ class SamAutomaticMaskGenerator:
                 "point_coords": [mask_data["points"][idx].tolist()],
                 "stability_score": mask_data["stability_score"][idx].item(),
                 "crop_box": box_xyxy_to_xywh(mask_data["crop_boxes"][idx]).tolist(),
+                "features": mask_data["iou_features"][idx].item(),
             }
             curr_anns.append(ann)
+
+        print("Iou_features",curr_anns["iou_features"])
+
+        # Add features to curr_anns
+
+        ##########################
 
         return curr_anns
 
@@ -203,6 +219,7 @@ class SamAutomaticMaskGenerator:
         # Iterate over image crops
         data = MaskData()
         for crop_box, layer_idx in zip(crop_boxes, layer_idxs):
+            print("Layer ID: ", layer_idx)
             crop_data = self._process_crop(image, crop_box, layer_idx, orig_size)
             data.cat(crop_data)
 
@@ -220,6 +237,11 @@ class SamAutomaticMaskGenerator:
             data.filter(keep_by_nms)
 
         data.to_numpy()
+
+        #for tensor in data["iou_features"]:
+            #print(tensor.tolist())
+            #print(len(tensor))
+
         return data
 
     def _process_crop(
@@ -244,8 +266,37 @@ class SamAutomaticMaskGenerator:
         for (points,) in batch_iterator(self.points_per_batch, points_for_image):
             batch_data = self._process_batch(points, cropped_im_size, crop_box, orig_size)
             data.cat(batch_data)
+
+            print("\nAfter each crop loop:")
+            print("\nIOU Predictions shape:", data["iou_preds"].shape)
+            print("\nIOU Features shape:", data["iou_features"].shape)
+
             del batch_data
         self.predictor.reset_image()
+
+        print("Boxes: ", data["boxes"].shape)
+        print("Iou_preds: ", data["iou_preds"].shape)
+        
+        # Convert tensor to a list for easier manipulation
+        iou_preds_list = data["iou_preds"].tolist()
+
+        # Dictionary to track indexes of each value
+        value_to_indexes = {}
+
+        # Populate the dictionary with indexes
+        for index, value in enumerate(iou_preds_list):
+            if value in value_to_indexes:
+                value_to_indexes[value].append(index)
+            else:
+                value_to_indexes[value] = [index]
+
+        # Print duplicate values and their indexes, with each duplicate pair in a separate group
+        for value, indexes in value_to_indexes.items():
+            if len(indexes) > 1:
+                print(f"Duplicate value {value}:")
+                for i in range(len(indexes) - 1):
+                    for j in range(i + 1, len(indexes)):
+                        print(f"  Pair: ({indexes[i]}, {indexes[j]})")
 
         # Remove duplicates within this crop.
         keep_by_nms = batched_nms(
@@ -276,25 +327,30 @@ class SamAutomaticMaskGenerator:
         transformed_points = self.predictor.transform.apply_coords(points, im_size)
         in_points = torch.as_tensor(transformed_points, device=self.predictor.device)
         in_labels = torch.ones(in_points.shape[0], dtype=torch.int, device=in_points.device)
-        masks, iou_preds, _ = self.predictor.predict_torch(
+        masks, iou_preds, _, iou_features = self.predictor.predict_torch(
             in_points[:, None, :],
             in_labels[:, None],
             multimask_output=True,
             return_logits=True,
         )
-
+        
         # Serialize predictions and store in MaskData
         data = MaskData(
             masks=masks.flatten(0, 1),
             iou_preds=iou_preds.flatten(0, 1),
             points=torch.as_tensor(points.repeat(masks.shape[1], axis=0)),
+            iou_features=iou_features.flatten(0, 1),
         )
         del masks
-
+        
         # Filter by predicted IoU
         if self.pred_iou_thresh > 0.0:
             keep_mask = data["iou_preds"] > self.pred_iou_thresh
             data.filter(keep_mask)
+
+            # Remove features corresponding to filtered predictions
+            #filtered_iou_features = [feature[keep_mask] for feature in data["iou_features"]]
+            #data["iou_features"] = filtered_iou_features
 
         # Calculate stability score
         data["stability_score"] = calculate_stability_score(
@@ -303,6 +359,10 @@ class SamAutomaticMaskGenerator:
         if self.stability_score_thresh > 0.0:
             keep_mask = data["stability_score"] >= self.stability_score_thresh
             data.filter(keep_mask)
+
+            # Remove features corresponding to filtered predictions
+            #filtered_iou_features = [feature[keep_mask] for feature in data["iou_features"]]
+            #data["iou_features"] = filtered_iou_features
 
         # Threshold masks and calculate boxes
         data["masks"] = data["masks"] > self.predictor.model.mask_threshold

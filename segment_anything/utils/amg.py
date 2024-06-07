@@ -42,19 +42,21 @@ class MaskData:
         return self._stats.items()
 
     def filter(self, keep: torch.Tensor) -> None:
+        exclude_keys = ['iou_features']
         for k, v in self._stats.items():
-            if v is None:
-                self._stats[k] = None
-            elif isinstance(v, torch.Tensor):
-                self._stats[k] = v[torch.as_tensor(keep, device=v.device)]
-            elif isinstance(v, np.ndarray):
-                self._stats[k] = v[keep.detach().cpu().numpy()]
-            elif isinstance(v, list) and keep.dtype == torch.bool:
-                self._stats[k] = [a for i, a in enumerate(v) if keep[i]]
-            elif isinstance(v, list):
-                self._stats[k] = [v[i] for i in keep]
-            else:
-                raise TypeError(f"MaskData key {k} has an unsupported type {type(v)}.")
+            if k not in exclude_keys:
+                if v is None:
+                    self._stats[k] = None
+                elif isinstance(v, torch.Tensor):
+                    self._stats[k] = v[torch.as_tensor(keep, device=v.device)]
+                elif isinstance(v, np.ndarray):
+                    self._stats[k] = v[keep.detach().cpu().numpy()]
+                elif isinstance(v, list) and keep.dtype == torch.bool:
+                    self._stats[k] = [a for i, a in enumerate(v) if keep[i]]
+                elif isinstance(v, list):
+                    self._stats[k] = [v[i] for i in keep]
+                else:
+                    raise TypeError(f"MaskData key {k} has an unsupported type {type(v)}.")
 
     def cat(self, new_stats: "MaskData") -> None:
         for k, v in new_stats.items():
@@ -65,7 +67,11 @@ class MaskData:
             elif isinstance(v, np.ndarray):
                 self._stats[k] = np.concatenate([self._stats[k], v], axis=0)
             elif isinstance(v, list):
-                self._stats[k] = self._stats[k] + deepcopy(v)
+                if len(v) > 0 and isinstance(v[0], torch.Tensor):
+                    self._stats[k] = [torch.cat([self_feat, other_feat], dim=0)
+                                      for self_feat, other_feat in zip(self._stats[k], v)]
+                else:
+                    self._stats[k] = self._stats[k] + deepcopy(v)
             else:
                 raise TypeError(f"MaskData key {k} has an unsupported type {type(v)}.")
 
