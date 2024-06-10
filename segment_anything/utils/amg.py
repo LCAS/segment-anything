@@ -42,9 +42,19 @@ class MaskData:
         return self._stats.items()
 
     def filter(self, keep: torch.Tensor) -> None:
-        exclude_keys = ['iou_features']
+        keys = ['iou_features']
         for k, v in self._stats.items():
-            if k not in exclude_keys:
+            if k in keys:
+                false_indices = torch.nonzero(keep, as_tuple=True)[0]
+                selected_featues = []
+                for index in false_indices:
+                    index_i  = index*4
+                    index_i_1  = (index+1)*4
+                    selected_featues.append(v[index_i:index_i_1])
+                selected_featues = torch.stack(selected_featues)
+
+                self._stats[k] = selected_featues.flatten()
+            else:
                 if v is None:
                     self._stats[k] = None
                 elif isinstance(v, torch.Tensor):

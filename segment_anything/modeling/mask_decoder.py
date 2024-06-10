@@ -180,6 +180,6 @@ class MLP(nn.Module):
         if self.sigmoid_output:
             x = F.sigmoid(x)
 
-        #print("x: ", len(x))
-        #print("features: ", len(features))
+        #print("x: ", x.shape)
+        #print("features: ", self.layers[-1].weight.shape)
         return x, self.layers[-1].weight
