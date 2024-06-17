@@ -52,14 +52,19 @@ class MaskData:
                 else:
                     false_indices = torch.nonzero(keep, as_tuple=True)[0]
                 #print("false_indices: ", false_indices)
-                selected_featues = []
-                for index in false_indices:
-                    index_i  = index*4
-                    index_i_1  = (index+1)*4
-                    selected_featues.append(v[index_i:index_i_1])
-                selected_featues = torch.stack(selected_featues)
-
-                self._stats[k] = selected_featues.flatten()
+                if len(false_indices) == 0:
+                    # Handle case where false_indices is empty
+                    selected_features = torch.empty(0, device=v.device)
+                else:
+                    selected_features = []
+                    for index in false_indices:
+                        index_i = index * 4
+                        index_i_1 = (index + 1) * 4
+                        selected_features.append(v[index_i:index_i_1])
+                    
+                    selected_features = torch.stack(selected_features)
+            
+                self._stats[k] = selected_features.flatten()
             else:
                 if v is None:
                     self._stats[k] = None
