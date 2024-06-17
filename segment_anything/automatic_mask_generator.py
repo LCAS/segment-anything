@@ -182,6 +182,10 @@ class SamAutomaticMaskGenerator:
         # Write mask records
         curr_anns = []
 
+        #print("mask_data[iou_features]: ", mask_data["iou_features"].shape)
+        #print("mask_data[iou_preds].shape[0]: ", mask_data["iou_preds"].shape[0])
+        #print("mask_data[iou_preds].shape[0],-1: ", (mask_data["iou_preds"].shape[0],-1))
+
         mask_data["iou_features_"] = np.reshape(mask_data["iou_features"], (mask_data["iou_preds"].shape[0],-1))
 
         for idx in range(len(mask_data["segmentations"])):
@@ -269,6 +273,9 @@ class SamAutomaticMaskGenerator:
             else:
                 value_to_indexes[value] = [index]
 
+        #print("iou_features: ", data["iou_features"].shape)
+        #print("iou_preds: ", data["iou_preds"].shape)
+
         # Remove duplicates within this crop.
         keep_by_nms = batched_nms(
             data["boxes"].float(),
@@ -276,6 +283,9 @@ class SamAutomaticMaskGenerator:
             torch.zeros_like(data["boxes"][:, 0]),  # categories
             iou_threshold=self.box_nms_thresh,
         )
+
+        #print("keep_by_nms: ", keep_by_nms.shape)
+
         data.filter(keep_by_nms)
 
         # Return to the original image frame
@@ -305,6 +315,9 @@ class SamAutomaticMaskGenerator:
             return_logits=True,
         )
 
+        #print("iou_features: ", iou_features.shape)
+        #print("iou_preds: ", iou_preds.shape)
+
         # Serialize predictions and store in MaskData
         data = MaskData(
             masks=masks.flatten(0, 1),
@@ -312,8 +325,11 @@ class SamAutomaticMaskGenerator:
             points=torch.as_tensor(points.repeat(masks.shape[1], axis=0)),
             iou_features=iou_features.flatten(0,1),
         )
-        del masks       
-        
+        del masks
+
+        #print("iou_features after: ", iou_features.flatten(0,1).shape)       
+        #print("iou_preds after: ", iou_preds.flatten(0,1).shape) 
+
         # Filter by predicted IoU
         if self.pred_iou_thresh > 0.0:
             keep_mask = data["iou_preds"] > self.pred_iou_thresh

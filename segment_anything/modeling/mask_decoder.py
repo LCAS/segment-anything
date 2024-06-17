@@ -106,7 +106,6 @@ class MaskDecoder(nn.Module):
         masks = masks[:, mask_slice, :, :]
         iou_pred = iou_pred[:, mask_slice]
         iou_features = iou_features[mask_slice, :]
-        #iou_features = [features[:, mask_slice] for features in iou_features]
 
         # Prepare output
         return masks, iou_pred, iou_features
@@ -182,4 +181,13 @@ class MLP(nn.Module):
 
         #print("x: ", x.shape)
         #print("features: ", self.layers[-1].weight.shape)
-        return x, self.layers[-1].weight
+        
+        # Combine the weights of the last two layers in the correct order
+        last_two_layer_weights = torch.cat((self.layers[-2].weight, self.layers[-1].weight))
+
+        #print("shape last layer: ", self.layers[-1].weight.shape)
+        #print("shape last layer: ", self.layers[-2].weight.shape)
+        #print("shape last two layers: ", last_two_layer_weights.shape)
+
+        #return x, last_two_layer_weights
+        return x, self.layers[-1].weight # To return just last layer

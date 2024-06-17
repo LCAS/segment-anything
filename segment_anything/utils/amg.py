@@ -45,7 +45,13 @@ class MaskData:
         keys = ['iou_features']
         for k, v in self._stats.items():
             if k in keys:
-                false_indices = torch.nonzero(keep, as_tuple=True)[0]
+                #print("keep: ", keep)
+                #print("max(keep): ", torch.max(keep))
+                if torch.max(keep).tolist() > 1:
+                    false_indices = torch.nonzero(torch.add(keep, 1e9), as_tuple=True)[0]
+                else:
+                    false_indices = torch.nonzero(keep, as_tuple=True)[0]
+                #print("false_indices: ", false_indices)
                 selected_featues = []
                 for index in false_indices:
                     index_i  = index*4
@@ -200,7 +206,6 @@ def build_point_grid(n_per_side: int) -> np.ndarray:
     points_y = np.tile(points_one_side[:, None], (1, n_per_side))
     points = np.stack([points_x, points_y], axis=-1).reshape(-1, 2)
     return points
-
 
 def build_all_layer_point_grids(
     n_per_side: int, n_layers: int, scale_per_layer: int
